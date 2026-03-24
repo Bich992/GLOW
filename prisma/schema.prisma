@@ -1,0 +1,398 @@
+// Prisma schema — PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums are not supported in SQLite — values enforced via TypeScript types in src/lib/types.ts
+
+model User {
+  id                   String    @id @default(cuid())
+  firebaseUid          String?   @unique
+  email                String    @unique
+  emailVerified        Boolean   @default(false)
+  username             String    @unique
+  displayName          String
+  avatarUrl            String?
+  bio                  String?
+  birthDate            DateTime?
+  isMinor              Boolean   @default(false)
+  isSuspended          Boolean   @default(false)
+  suspendedUntil       DateTime?
+  strikeCount          Int       @default(0)
+  isAdmin              Boolean   @default(false)
+  isDemoUser           Boolean   @default(false)
+  last_active_at       DateTime  @default(now())
+  last_daily_bonus_at  DateTime?
+  login_streak         Int       @default(0)
+  welcome_bonus_given  Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  profile              Profile?
+  wallet               Wallet?
+  posts                Post[]
+  likes                Like[]
+  comments             Comment[]
+  extensions           PostExtension[]
+  boosts               PostBoost[]
+  sentFollows          Follow[]            @relation("Follower")
+  receivedFollows      Follow[]            @relation("Following")
+  notifications        Notification[]
+  reports              Report[]
+  auditLogs            AuditLog[]
+  authProviders        AuthProvider[]
+  fcmTokens            FcmToken[]
+  moderationActions    ModerationAction[]  @relation("ModeratedUser")
+  adminActions         ModerationAction[]  @relation("AdminUser")
+  usernameHistory      UsernameHistory[]
+  tokenTransactions    TokenTransaction[]
+  crystallisationVotes CrystallisationVote[]
+  echoes               Echo[]
+
+  @@index([username])
+  @@index([email])
+  @@index([firebaseUid])
+  @@index([last_active_at])
+}
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  website        String?
+  location       String?
+  headerUrl      String?
+  postCount      Int      @default(0)
+  followerCount  Int      @default(0)
+  followingCount Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Wallet {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  balance     Float    @default(0)
+  earnedToday Float    @default(0)
+  earnResetAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions TokenTransaction[]
+
+  @@index([userId])
+}
+
+model TokenTransaction {
+  id           String   @id @default(cuid())
+  userId       String
+  walletId     String
+  // type: earn | spend | faucet | admin
+  type         String
+  amount       Float
+  balanceAfter Float
+  description  String
+  postId       String?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet       Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  post         Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([walletId])
+  @@index([postId])
+  @@index([createdAt])
+}
+
+model Post {
+  id                    String    @id @default(cuid())
+  authorId              String
+  content               String
+  imageUrl              String?
+  audioUrl              String?
+  videoUrl              String?
+  // status: draft | live | expired | archived
+  status                String    @default("draft")
+  publishedAt           DateTime?
+  expiresAt             DateTime?
+  born_at               DateTime  @default(now())
+  is_expired            Boolean   @default(false)
+  boostPriority         Float     @default(0)
+  hiddenByMod           Boolean   @default(false)
+  is_crystallised       Boolean   @default(false)
+  crystallise_threshold Int       @default(5)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  author               User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  stats                PostStats?
+  extensions           PostExtension[]
+  boosts               PostBoost[]
+  likes                Like[]
+  comments             Comment[]
+  reports              Report[]
+  transactions         TokenTransaction[]
+  notifications        Notification[]
+  crystallise_votes    CrystallisationVote[]
+  echoes               Echo[]
+
+  @@index([authorId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([is_expired])
+  @@index([boostPriority])
+  @@index([publishedAt])
+  @@index([is_crystallised])
+}
+
+model PostStats {
+  id             String   @id @default(cuid())
+  postId         String   @unique
+  likeCount      Int      @default(0)
+  commentCount   Int      @default(0)
+  extensionCount Int      @default(0)
+  boostCount     Int      @default(0)
+  totalBoostTimt Float    @default(0)
+  viewCount      Int      @default(0)
+  er60           Float    @default(0)
+  er60UpdatedAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model PostExtension {
+  id             String   @id @default(cuid())
+  postId         String
+  userId         String
+  deltaSeconds   Int
+  extensionIndex Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([postId, userId])
+  @@index([createdAt])
+}
+
+model PostBoost {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  amount    Float
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id          String    @id @default(cuid())
+  postId      String
+  userId      String
+  content     String
+  hiddenByMod Boolean   @default(false)
+  parentId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent      Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     Comment[] @relation("CommentReplies")
+  reports     Report[]
+
+  @@index([postId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  // type: like | comment | follow | boost | extend | expire_soon | system
+  type      String
+  title     String
+  body      String
+  postId    String?
+  actorId   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  reporterId  String
+  postId      String?
+  commentId   String?
+  // reason: spam | hate_speech | harassment | misinformation | explicit_content | other
+  reason      String
+  description String?
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  reporter    User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  post        Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  comment     Comment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+
+  @@index([reporterId])
+  @@index([postId])
+  @@index([resolved])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  metadata  String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model AuthProvider {
+  id          String   @id @default(cuid())
+  userId      String
+  provider    String
+  providerUid String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUid])
+  @@index([userId])
+}
+
+model FcmToken {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  deviceInfo String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ModerationAction {
+  id        String    @id @default(cuid())
+  adminId   String
+  userId    String
+  // type: warn | hide_post | strike | suspend | unsuspend | restore_post
+  type      String
+  reason    String
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  admin     User      @relation("AdminUser", fields: [adminId], references: [id])
+  user      User      @relation("ModeratedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([userId])
+}
+
+model UsernameHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  username  String
+  changedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([username])
+}
+
+model CrystallisationVote {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Echo {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  comment   String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
