@@ -1,5 +1,7 @@
 {
   "crons": [
-    { "path": "/api/cron/expire-posts", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/expire-posts",         "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/update-temperatures",  "schedule": "0 * * * *"   },
+    { "path": "/api/cron/purge-logs",           "schedule": "0 3 * * *"   }
   ]
 }

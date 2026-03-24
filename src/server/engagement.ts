@@ -1,83 +1,127 @@
 import { prisma } from '@/lib/db';
 import { REMOTE_CONFIG_DEFAULTS } from '@/lib/config';
-import { LIFETIME_DELTAS_MS } from '@/lib/lifetime';
+import { computeExpiresAt, FUEL_WEIGHTS } from '@/lib/glow-engine';
+import { logger } from '@/lib/logger';
 import { creditWallet } from './wallet';
 import { computeER60 } from './economy';
 import { createNotification } from './notifications';
 
-/** Atomically extend a post's expires_at by deltaMs milliseconds using raw SQL. */
-async function extendPostLifetime(postId: string, deltaMs: number): Promise<void> {
-  const deltaSeconds = Math.floor(deltaMs / 1000);
-  await prisma.$executeRaw`
-    UPDATE "Post"
-    SET "expiresAt" = "expiresAt" + (${deltaSeconds} * interval '1 second')
-    WHERE id = ${postId} AND "is_expired" = false
-  `;
+/**
+ * Increments a post's fuel_points_total by `delta` and recomputes expiresAt
+ * using the Glow Engine formula. Also checks for crystallisation threshold.
+ * Must be called inside a Prisma transaction.
+ */
+async function applyFuelAndRecomputeTTL(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  postId: string,
+  delta: number
+): Promise<void> {
+  const post = await tx.post.findUnique({
+    where: { id: postId },
+    select: {
+      id: true,
+      born_at: true,
+      born_during_wave: true,
+      fuel_points_total: true,
+      is_crystallised: true,
+      is_expired: true,
+      crystallise_threshold: true,
+      author: { select: { glow_trust: true } },
+    },
+  });
+
+  if (!post || post.is_expired || post.is_crystallised) return;
+
+  const newFuelPoints = post.fuel_points_total + delta;
+  const newExpiresAt = computeExpiresAt({
+    bornAt: post.born_at,
+    currentFuelPoints: newFuelPoints,
+    authorGlowTrust: post.author.glow_trust,
+    bornDuringWave: post.born_during_wave,
+  });
+
+  // Check crystallisation threshold
+  const voteCount = await tx.crystallisationVote.count({ where: { postId } });
+  const shouldCrystallise = voteCount >= post.crystallise_threshold;
+
+  if (shouldCrystallise) {
+    await tx.post.update({
+      where: { id: postId },
+      data: {
+        fuel_points_total: newFuelPoints,
+        is_crystallised: true,
+        is_expired: false,
+        expiresAt: null,
+      },
+    });
+    logger.info('Post crystallised via fuel threshold', { postId, voteCount });
+  } else {
+    await tx.post.update({
+      where: { id: postId },
+      data: {
+        fuel_points_total: newFuelPoints,
+        expiresAt: newExpiresAt,
+      },
+    });
+  }
 }
 
 export async function addLike(
   userId: string,
   postId: string
 ): Promise<{ liked: boolean; likeCount: number }> {
-  // Fetch post first (outside transaction)
   const post = await prisma.post.findUnique({
     where: { id: postId },
     select: { id: true, authorId: true, status: true },
   });
   if (!post) throw new Error('Post not found');
   if (post.status !== 'live') throw new Error('Post is not live');
+  if (post.authorId === userId) throw new Error('Cannot like your own post');
 
-  // Self-interaction guard
-  if (post.authorId === userId) {
-    throw new Error('Cannot like your own post');
-  }
-
-  // Check if already liked
   const existing = await prisma.like.findUnique({
     where: { postId_userId: { postId, userId } },
   });
 
   if (existing) {
-    // Unlike — simple update, no reward needed
-    await prisma.like.delete({ where: { postId_userId: { postId, userId } } });
-    await prisma.postStats.updateMany({
-      where: { postId },
-      data: { likeCount: { decrement: 1 } },
+    // Unlike — reverse the fuel delta
+    await prisma.$transaction(async (tx) => {
+      await tx.like.delete({ where: { postId_userId: { postId, userId } } });
+      await tx.postStats.updateMany({
+        where: { postId },
+        data: { likeCount: { decrement: 1 } },
+      });
+      await applyFuelAndRecomputeTTL(tx, postId, -FUEL_WEIGHTS.like);
     });
     const stats = await prisma.postStats.findUnique({ where: { postId } });
     return { liked: false, likeCount: stats?.likeCount ?? 0 };
   }
 
-  // Like — create record and update stats
-  await prisma.like.create({ data: { postId, userId } });
-  await prisma.postStats.updateMany({
-    where: { postId },
-    data: { likeCount: { increment: 1 } },
+  // Like — add fuel delta
+  await prisma.$transaction(async (tx) => {
+    await tx.like.create({ data: { postId, userId } });
+    await tx.postStats.updateMany({
+      where: { postId },
+      data: { likeCount: { increment: 1 } },
+    });
+    await applyFuelAndRecomputeTTL(tx, postId, FUEL_WEIGHTS.like);
   });
 
   const stats = await prisma.postStats.findUnique({ where: { postId } });
   const likeCount = stats?.likeCount ?? 1;
 
-  // Extend post lifetime
-  await extendPostLifetime(postId, LIFETIME_DELTAS_MS.like).catch(
-    (e) => console.warn('extendPostLifetime failed:', e)
+  // Side effects outside transaction
+  const earnAmount = REMOTE_CONFIG_DEFAULTS.LIKE_EARN_TIMT;
+  await creditWallet(post.authorId, earnAmount, 'Like received on post', 'earn', postId).catch(
+    (e: unknown) => logger.warn('creditWallet failed', { err: String(e) })
   );
-
-  // Side effects: reward + notification (after the like is committed)
-  if (post.authorId !== userId) {
-    const earnAmount = REMOTE_CONFIG_DEFAULTS.LIKE_EARN_TIMT;
-    await creditWallet(post.authorId, earnAmount, `Like received on post`, 'earn', postId).catch(
-      (e) => console.warn('creditWallet failed:', e)
-    );
-    await createNotification({
-      userId: post.authorId,
-      type: 'like',
-      title: 'New like',
-      body: 'Someone liked your post!',
-      postId,
-      actorId: userId,
-    });
-  }
+  await createNotification({
+    userId: post.authorId,
+    type: 'like',
+    title: 'New like',
+    body: 'Someone liked your post!',
+    postId,
+    actorId: userId,
+  });
 
   return { liked: true, likeCount };
 }
@@ -112,38 +156,59 @@ export async function addComment(
   if (post.status !== 'live') throw new Error('Post is not live');
   if (post.authorId === userId) throw new Error('Cannot comment on your own post to earn rewards');
 
-  const comment = await prisma.comment.create({
-    data: { postId, userId, content: content.trim(), ...(parentId ? { parentId } : {}) },
-  });
+  // Fuel delta only for comments meeting the minimum length
+  const qualifiesForFuel = content.trim().length >= 20;
+  const fuelDelta = qualifiesForFuel ? FUEL_WEIGHTS.comment : 0;
 
-  await prisma.postStats.updateMany({
-    where: { postId },
-    data: { commentCount: { increment: 1 } },
-  });
-
-  // Extend post lifetime (+15 min only for comments >= 20 chars)
-  if (content.trim().length >= 20) {
-    await extendPostLifetime(postId, LIFETIME_DELTAS_MS.comment).catch(
-      (e) => console.warn('extendPostLifetime failed:', e)
-    );
-  }
-
-  // Side effects: reward + notification
-  if (post.authorId !== userId) {
-    await creditWallet(post.authorId, earnAmount, `Comment received on post`, 'earn', postId).catch(
-      (e) => console.warn('creditWallet failed:', e)
-    );
-    await createNotification({
-      userId: post.authorId,
-      type: 'comment',
-      title: 'New comment',
-      body: `Someone commented: "${content.slice(0, 50)}${content.length > 50 ? '...' : ''}"`,
-      postId,
-      actorId: userId,
+  const comment = await prisma.$transaction(async (tx) => {
+    const c = await tx.comment.create({
+      data: { postId, userId, content: content.trim(), ...(parentId ? { parentId } : {}) },
     });
-  }
+    await tx.postStats.updateMany({
+      where: { postId },
+      data: { commentCount: { increment: 1 } },
+    });
+    if (fuelDelta > 0) {
+      await applyFuelAndRecomputeTTL(tx, postId, fuelDelta);
+    }
+    return c;
+  });
+
+  // Side effects outside transaction
+  await creditWallet(post.authorId, earnAmount, 'Comment received on post', 'earn', postId).catch(
+    (e: unknown) => logger.warn('creditWallet failed', { err: String(e) })
+  );
+  await createNotification({
+    userId: post.authorId,
+    type: 'comment',
+    title: 'New comment',
+    body: `Someone commented: "${content.slice(0, 50)}${content.length > 50 ? '...' : ''}"`,
+    postId,
+    actorId: userId,
+  });
 
   return { id: comment.id };
+}
+
+/**
+ * Applies echo fuel weight to a post.
+ * Called from the echo API route after the echo record is created.
+ */
+export async function applyEchoFuel(postId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await applyFuelAndRecomputeTTL(tx, postId, FUEL_WEIGHTS.echo);
+  });
+}
+
+/**
+ * Applies boost fuel weight proportional to the FUEL amount spent.
+ * Called from the boost API route after the boost record is created.
+ */
+export async function applyBoostFuel(postId: string, amount: number): Promise<void> {
+  const delta = amount * FUEL_WEIGHTS.boost_per_fuel;
+  await prisma.$transaction(async (tx) => {
+    await applyFuelAndRecomputeTTL(tx, postId, delta);
+  });
 }
 
 export async function maybeAwardEngagementBonus(postId: string): Promise<boolean> {
