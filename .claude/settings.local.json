@@ -1,0 +1,50 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Read(//usr/local/bin/**)",
+      "Bash(find /usr -name node -type f)",
+      "Bash(echo $PATH)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" --version)",
+      "Bash(\"/c/Users/betty/AppData/Local/Microsoft/WinGet/Packages/Schniz.fnm_Microsoft.Winget.Source_8wekyb3d8bbwe/fnm.exe\" --version)",
+      "Bash(\"/c/Users/betty/AppData/Local/Microsoft/WinGet/Packages/Schniz.fnm_Microsoft.Winget.Source_8wekyb3d8bbwe/fnm.exe\" list:*)",
+      "Bash(export NODE_DIR=\"/c/Users/betty/AppData/Roaming/fnm/node-versions/v20.17.0/installation\")",
+      "Bash(export PATH=\"$NODE_DIR:$PATH\")",
+      "Bash(npx prisma:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(rm -rf .next)",
+      "Bash(node -e \"const p=require\\(''path''\\); console.log\\(p.resolve\\(''./src/lib/empty-module.js''\\)\\)\")",
+      "Bash(node -e \"const d=require\\(''''/dev/stdin''''\\); console.log\\(JSON.stringify\\(d.exports?.[''''.''''] ?? d.exports, null, 2\\)\\)\")",
+      "Bash(export NODE_DIR=/c/Users/betty/AppData/Roaming/fnm/node-versions/v20.17.0/installation)",
+      "Bash(export PATH=$NODE_DIR:$PATH)",
+      "Bash(node -e \":*)",
+      "Bash(export NODE_OPTIONS=\"--max-old-space-size=4096\")",
+      "Bash(docker compose:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files/Docker/**)",
+      "Bash(export PATH=\"/c/Users/betty/AppData/Roaming/fnm/node-versions/v20.17.0/installation:$PATH\")",
+      "Bash(ls -la \"c:/Users/betty/OneDrive/Desktop/TIMELY\"/.env*)",
+      "Bash(\"/c/Program Files/Docker/Docker/resources/bin/docker.exe\" ps)",
+      "Bash(\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" --version)",
+      "Bash(cmd.exe /c \"docker ps\")",
+      "Bash(cmd.exe /c \"docker ps 2>&1\")",
+      "Read(//c/Users/betty/OneDrive/Desktop/TIMELY/**)",
+      "Bash(cmd.exe /c \"docker ps 2>&1 && echo OK\")",
+      "Bash(export PATH=/c/Users/betty/AppData/Roaming/fnm/node-versions/v20.17.0/installation:$PATH cd c:/Users/betty/OneDrive/Desktop/TIMELY grep -rn \"PostStatus\\\\.\\\\|TransactionType\\\\.\\\\|NotificationType\\\\.\\\\|ReportReason\\\\.\\\\|ModerationActionType\\\\.\" src/ prisma/seed.ts)",
+      "Bash(export PATH=/c/Users/betty/AppData/Roaming/fnm/node-versions/v20.17.0/installation:$PATH cd c:/Users/betty/OneDrive/Desktop/TIMELY grep -rn \"PostStatus\\\\|TransactionType\\\\|NotificationType\\\\|ReportReason\\\\|ModerationActionType\" src/ prisma/seed.ts)",
+      "Bash(export PATH=\"/c/Users/betty/AppData/Roaming/fnm/node-versions/v20.17.0/installation:$PATH\" cd \"c:/Users/betty/OneDrive/Desktop/TIMELY\" npx tsc --noEmit)",
+      "Bash(find c:UsersstudiOneDriveDesktopALETIMELY/src/features -type f -name *.ts -o -name *.tsx)",
+      "Bash(npm list:*)",
+      "Bash(grep -E \"^[^/]*$|src/|prisma/\")",
+      "Read(//c/Users/studi/OneDrive/Desktop/ALE/TIMELY/**)",
+      "Bash(npx jest:*)",
+      "Bash(npx vercel:*)",
+      "Bash(node -e \"console.log\\(require\\(''crypto''\\).randomBytes\\(32\\).toString\\(''hex''\\)\\)\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\studi\\OneDrive\\Desktop\\ALE\\TIMELY\\src\\app\\profile\\[username]",
+      "c:\\Users\\studi\\OneDrive\\Desktop\\ALE\\TIMELY\\src\\app\\api\\users\\[username]"
+    ]
+  }
+}

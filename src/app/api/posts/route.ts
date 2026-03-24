@@ -52,14 +52,6 @@ export async function POST(request: NextRequest) {
 
     const { content, imageUrl, audioUrl, videoUrl } = parsed.data;
 
-    // Media is required
-    if (!imageUrl && !audioUrl && !videoUrl) {
-      return NextResponse.json(
-        { error: 'Media is required (image, audio, or video)' },
-        { status: 400 }
-      );
-    }
-
     const localHourHeader = request.headers.get('X-Local-Hour');
     const localHour = localHourHeader !== null ? parseInt(localHourHeader, 10) : undefined;
 
