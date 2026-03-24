@@ -49,9 +49,9 @@ export async function getFeed(options: {
   }
 
   const where = {
-    is_expired: false,
-    is_crystallised: false,
     hiddenByMod: false,
+    is_crystallised: false,
+    expiresAt: { gt: new Date() },
     ...(filter === 'following' && userId
       ? { authorId: { in: followingIds } }
       : {}),
