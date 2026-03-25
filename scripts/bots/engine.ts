@@ -7,6 +7,8 @@ import { actionBoost } from './actions/boost';
 import { actionEcho } from './actions/echo';
 import { actionCrystallise } from './actions/crystallise';
 import { actionFollow } from './actions/follow';
+import { actionArenaPresence } from './actions/presence';
+import { actionArenaBet } from './actions/bet';
 
 // ── Safety guard ────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_BOTS_PROD) {
@@ -38,13 +40,15 @@ async function runAction(
 ): Promise<void> {
   try {
     switch (action) {
-      case 'post':        return actionPost(bot, session);
-      case 'like':        return actionLike(bot, session);
-      case 'comment':     return actionComment(bot, session);
-      case 'boost':       return actionBoost(bot, session);
-      case 'echo':        return actionEcho(bot, session);
-      case 'crystallise': return actionCrystallise(bot, session);
-      case 'follow':      return actionFollow(bot, session);
+      case 'post':            return actionPost(bot, session);
+      case 'like':            return actionLike(bot, session);
+      case 'comment':         return actionComment(bot, session);
+      case 'boost':           return actionBoost(bot, session);
+      case 'echo':            return actionEcho(bot, session);
+      case 'crystallise':     return actionCrystallise(bot, session);
+      case 'follow':          return actionFollow(bot, session);
+      case 'arena_presence':  return actionArenaPresence(bot, session);
+      case 'arena_bet':       return actionArenaBet(bot, session);
     }
   } catch (e) {
     process.stderr.write(

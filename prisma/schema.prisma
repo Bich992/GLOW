@@ -59,6 +59,8 @@ model User {
   tokenTransactions    TokenTransaction[]
   crystallisationVotes CrystallisationVote[]
   echoes               Echo[]
+  presenceTracking     PresenceTracking[]
+  fuelBets             FuelBet[]
 
   @@index([username])
   @@index([email])
@@ -140,6 +142,21 @@ model Post {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // ── Arena Mechanics ────────────────────────────────────────────────────────
+  // arena_state: hidden | revealed | crystallised | expired
+  arena_state           String    @default("hidden")
+  is_anonymous          Boolean   @default(true)
+  is_revealed           Boolean   @default(false)
+  // Milliseconds of active long-press viewing required to bloom (dynamic)
+  threshold_presence_ms Int       @default(30000)
+  // Accumulated active viewing time in milliseconds
+  total_presence_ms     Int       @default(0)
+  // Total FUEL staked by scouts on this post
+  total_fuel_bet        Float     @default(0)
+  scout_count           Int       @default(0)
+  // Tags array stored as JSON for Arena tag-affinity bot matching
+  tags                  Json?
+
   author               User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
   stats                PostStats?
   extensions           PostExtension[]
@@ -151,6 +168,8 @@ model Post {
   notifications        Notification[]
   crystallise_votes    CrystallisationVote[]
   echoes               Echo[]
+  presenceTracking     PresenceTracking[]
+  fuelBets             FuelBet[]
 
   @@index([authorId])
   @@index([status])
@@ -159,6 +178,57 @@ model Post {
   @@index([boostPriority])
   @@index([publishedAt])
   @@index([is_crystallised])
+  @@index([arena_state])
+  @@index([is_revealed])
+}
+
+// ── Arena: Real Presence Tracking ─────────────────────────────────────────────
+// One record per (user, post) pair. Tracks viewing time with anti-farming caps.
+model PresenceTracking {
+  id                      String   @id @default(cuid())
+  userId                  String
+  postId                  String
+  // Raw viewing time — always increments
+  total_duration_ms       Int      @default(0)
+  // TTL-contributing time — capped at max_contribution
+  contribution_to_ttl_ms  Int      @default(0)
+  // Current diminishing returns rate (1.0 | 0.5 | 0.0)
+  diminishing_rate        Float    @default(1.0)
+  // True once user has exhausted their contribution allowance
+  max_contribution_reached Boolean @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post  Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([userId])
+}
+
+// ── Arena: Scouting (FUEL Bets on Anonymous Posts) ────────────────────────────
+model FuelBet {
+  id                            String    @id @default(cuid())
+  scoutId                       String
+  postId                        String
+  fuel_invested                 Float
+  // Captured at bet time — author's follower count is hidden from scout
+  author_follower_count_snapshot Int
+  // 1 + (1 / log10(follower_count + 2))
+  risk_coefficient              Float
+  potential_reward              Float
+  placed_at                     DateTime  @default(now())
+  // Settlement
+  is_settled                    Boolean   @default(false)
+  actual_reward                 Float?
+  settled_at                    DateTime?
+
+  scout User @relation(fields: [scoutId], references: [id], onDelete: Cascade)
+  post  Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, is_settled])
+  @@index([scoutId])
 }
 
 model PostStats {

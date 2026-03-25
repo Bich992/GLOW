@@ -40,7 +40,10 @@
       "Read(//c/Users/studi/OneDrive/Desktop/ALE/TIMELY/**)",
       "Bash(npx jest:*)",
       "Bash(npx vercel:*)",
-      "Bash(node -e \"console.log\\(require\\(''crypto''\\).randomBytes\\(32\\).toString\\(''hex''\\)\\)\")"
+      "Bash(node -e \"console.log\\(require\\(''crypto''\\).randomBytes\\(32\\).toString\\(''hex''\\)\\)\")",
+      "Bash(mkdir -p \"c:/Users/studi/OneDrive/Desktop/ALE/TIMELY/src/app/api/posts/[id]/presence\")",
+      "Bash(mkdir -p \"c:/Users/studi/OneDrive/Desktop/ALE/TIMELY/src/app/api/posts/[id]/bet\")",
+      "Bash(npx tsx:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\studi\\OneDrive\\Desktop\\ALE\\TIMELY\\src\\app\\profile\\[username]",
